@@ -1179,7 +1179,6 @@ int yh_com_get_pubkey(yubihsm_context *ctx, Argument *argv, cmd_format in_fmt,
   return 0;
 }
 
-#ifdef USE_ASYMMETRIC_AUTH
 // NOTE: Get device public key
 // argc = 0
 int yh_com_get_device_pubkey(yubihsm_context *ctx, Argument *argv,
@@ -1272,7 +1271,6 @@ int yh_com_get_device_pubkey(yubihsm_context *ctx, Argument *argv,
 
   return 0;
 }
-#endif
 
 // NOTE: Get object information
 // argc = 3
@@ -1624,7 +1622,6 @@ int yh_com_open_session(yubihsm_context *ctx, Argument *argv, cmd_format in_fmt,
   return 0;
 }
 
-#ifdef USE_ASYMMETRIC_AUTH
 // NOTE: Open a session with a connector using an Asymmetric
 // Authentication Key argc = 2 arg 0: w:authkey arg 1: i:password
 int yh_com_open_session_asym(yubihsm_context *ctx, Argument *argv,
@@ -1738,9 +1735,7 @@ int yh_com_open_session_asym(yubihsm_context *ctx, Argument *argv,
 
   return 0;
 }
-#endif
 
-#ifdef YKHSMAUTH_ENABLED
 // NOTE: Open a session using a key stored on YubiKey
 // argc = 3
 // arg 0: w:authkey
@@ -1767,8 +1762,9 @@ int yh_com_open_yksession(yubihsm_context *ctx, Argument *argv,
   uint8_t host_challenge[YH_EC_P256_PUBKEY_LEN] = {0};
   size_t host_challenge_len = sizeof(host_challenge);
 
-  ykhsmauthrc = ykhsmauth_get_challenge(ctx->state, argv[1].s, host_challenge,
-                                        &host_challenge_len);
+  ykhsmauthrc = ykhsmauth_get_challenge_ex(ctx->state, argv[1].s,
+                                        argv[2].x, argv[2].len, 
+                                        host_challenge, &host_challenge_len);
   if (ykhsmauthrc != YKHSMAUTHR_SUCCESS) {
     fprintf(stderr, "Failed to get host challenge from the YubiKey: %s\n",
             ykhsmauth_strerror(ykhsmauthrc));
@@ -1798,8 +1794,6 @@ int yh_com_open_yksession(yubihsm_context *ctx, Argument *argv,
       return -1;
     }
 
-#ifdef USE_ASYMMETRIC_AUTH
-
     int matched = 0;
     for (uint8_t **pubkey = ctx->device_pubkey_list; *pubkey; pubkey++) {
       if (!memcmp(*pubkey, card_pubkey, card_pubkey_len)) {
@@ -1818,8 +1812,6 @@ int yh_com_open_yksession(yubihsm_context *ctx, Argument *argv,
       ykhsmauth_disconnect(ctx->state);
       return -1;
     }
-
-#endif
   }
 
   uint8_t card_cryptogram[YH_KEY_LEN] = {0};
@@ -1891,7 +1883,6 @@ int yh_com_open_yksession(yubihsm_context *ctx, Argument *argv,
 
   return 0;
 }
-#endif
 
 // NOTE(adma): Send unauthenticated echo
 // argc = 2
@@ -2090,7 +2081,6 @@ int yh_com_put_authentication(yubihsm_context *ctx, Argument *argv,
   return 0;
 }
 
-#ifdef USE_ASYMMETRIC_AUTH
 // NOTE: Store an asymmetric authentication key
 // argc = 7
 // arg 0: e:session
@@ -2159,7 +2149,6 @@ int yh_com_put_authentication_asym(yubihsm_context *ctx, Argument *argv,
 
   return 0;
 }
-#endif
 
 // NOTE(adma): Store an opaque object
 // argc = 6
@@ -2920,9 +2909,7 @@ int yh_com_benchmark(yubihsm_context *ctx, Argument *argv, cmd_format in_fmt,
     {0, 0, 512, "Random 512 bytes"},
     {0, 0, 1024, "Random 1024 bytes"},
     {YH_ALGO_AES128_YUBICO_AUTHENTICATION, 0, 0, ""},
-#ifdef USE_ASYMMETRIC_AUTH
     {YH_ALGO_EC_P256_YUBICO_AUTHENTICATION, 0, 0, ""},
-#endif
   };
 
   // this is some data for the OTP benchmark
@@ -2958,11 +2945,9 @@ int yh_com_benchmark(yubihsm_context *ctx, Argument *argv, cmd_format in_fmt,
     const char *str1 = NULL, *str2 = "", *str3 = "";
     uint16_t id = argv[2].w;
     char label[YH_OBJ_LABEL_LEN + 1] = {0};
-#ifdef USE_ASYMMETRIC_AUTH
     uint8_t sk_oce[YH_EC_P256_PRIVKEY_LEN], pk_oce[YH_EC_P256_PUBKEY_LEN],
       pk_sd[YH_EC_P256_PUBKEY_LEN];
     size_t pk_sd_len = sizeof(pk_sd);
-#endif
     yh_object_type type = 0;
 #ifndef _WIN32
     size_t chars = 0;
@@ -3105,7 +3090,6 @@ int yh_com_benchmark(yubihsm_context *ctx, Argument *argv, cmd_format in_fmt,
                                                       0xffff, &capabilities,
                                                       &capabilities, password,
                                                       sizeof(password) - 1);
-#ifdef USE_ASYMMETRIC_AUTH
     } else if (benchmarks[i].algo == YH_ALGO_EC_P256_YUBICO_AUTHENTICATION) {
       type = YH_AUTHENTICATION_KEY;
       yh_string_to_capabilities("", &capabilities);
@@ -3122,7 +3106,6 @@ int yh_com_benchmark(yubihsm_context *ctx, Argument *argv, cmd_format in_fmt,
             yh_util_get_device_pubkey(ctx->connector, pk_sd, &pk_sd_len, NULL);
         }
       }
-#endif
     } else {
       fprintf(stderr, "Unknown benchmark algorithms\n");
       return -1;
@@ -3209,7 +3192,6 @@ int yh_com_benchmark(yubihsm_context *ctx, Argument *argv, cmd_format in_fmt,
         if (yrc == YHR_SUCCESS) {
           yrc = yh_util_close_session(ses);
         }
-#ifdef USE_ASYMMETRIC_AUTH
       } else if (benchmarks[i].algo == YH_ALGO_EC_P256_YUBICO_AUTHENTICATION) {
         yh_session *ses = NULL;
         yrc = yh_create_session_asym(ctx->connector, id, sk_oce, sizeof(sk_oce),
@@ -3217,7 +3199,6 @@ int yh_com_benchmark(yubihsm_context *ctx, Argument *argv, cmd_format in_fmt,
         if (yrc == YHR_SUCCESS) {
           yrc = yh_util_close_session(ses);
         }
-#endif
       } else {
         fprintf(stderr, "Unknown benchmark algorithm\n");
         return -1;
@@ -3710,7 +3691,6 @@ int yh_com_change_authentication_key(yubihsm_context *ctx, Argument *argv,
   return 0;
 }
 
-#ifdef USE_ASYMMETRIC_AUTH
 // NOTE: Change asymmetric authentication key
 // argc = 3
 // arg 0: e:session
@@ -3773,4 +3753,3 @@ int yh_com_change_authentication_key_asym(yubihsm_context *ctx, Argument *argv,
 
   return 0;
 }
-#endif
